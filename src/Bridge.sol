@@ -27,6 +27,8 @@ abstract contract Bridge is IMessageReceiver {
         bytes32 messageHash
     );
 
+    event MessageReceived(address indexed receiver, uint256 indexed amount);
+
     modifier onlyInbox() {
         require(msg.sender == inbox, "not sent by the inbox contract");
         _;
@@ -50,7 +52,7 @@ abstract contract Bridge is IMessageReceiver {
     }
 
     function sendMessage(uint64 nonce, uint256 value) internal {
-        require(value > 0, "No ETH Sent");
+        require(value > 0, "No value Sent");
         bytes memory payload = abi.encode(msg.sender, value);
 
         Types.CRCMessage memory message = Types.CRCMessage(
@@ -67,7 +69,7 @@ abstract contract Bridge is IMessageReceiver {
 
         bytes32 messageHash = outbox.sendMessage(message);
 
-        emit Lock(msg.sender, msg.value, messageHash);
+        emit Lock(msg.sender, value, messageHash);
     }
 
     /// @notice receives CRCMessageEnvelope
@@ -84,6 +86,7 @@ abstract contract Bridge is IMessageReceiver {
             (address, uint256)
         );
         assert(receiver == envelope.message.user);
+        emit MessageReceived(receiver, value);
         return onMessageReceived(receiver, value);
     }
 

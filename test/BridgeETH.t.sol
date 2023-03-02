@@ -23,6 +23,14 @@ contract MockCRCOutbox is ICRCOutbox {
 }
 
 contract CRCOutboxTest is Test {
+    event Lock(
+        address indexed sender,
+        uint256 indexed amount,
+        bytes32 messageHash
+    );
+
+    event MessageReceived(address indexed receiver, uint256 indexed amount);
+
     /// @notice version of Wisp that this protocol uses
     uint8 public constant WISP_VERSION = 1;
 
@@ -109,8 +117,15 @@ contract CRCOutboxTest is Test {
         source.lock{value: value}(nonce);
     }
 
+    function testLockEventEmitted(uint64 nonce, uint256 value) public {
+        value = bound(value, 1, 10000);
+        vm.expectEmit(true, true, false, false);
+        emit Lock(address(this), value, hex"");
+        source.lock{value: value}(nonce);
+    }
+
     function testRevertingOnZero(uint64 nonce) public {
-        vm.expectRevert("No ETH Sent");
+        vm.expectRevert("No value Sent");
         source.lock(nonce);
     }
 
@@ -141,6 +156,39 @@ contract CRCOutboxTest is Test {
         destination.receiveMessage(envelope, sourceChainId);
 
         assertEq(balanceBefore + value, address(this).balance);
+    }
+
+    function testMessageReceivedEventEmitted(uint64 nonce, uint256 value)
+        public
+    {
+        value = bound(value, 1, 10000);
+        bytes memory payload = abi.encode(address(this), value);
+
+        Types.CRCMessage memory message = Types.CRCMessage({
+            version: WISP_VERSION,
+            destinationChainId: destinationChainId,
+            nonce: nonce,
+            user: address(this),
+            target: address(destination),
+            payload: payload,
+            stateRelayFee: 0,
+            deliveryFee: 0,
+            extra: hex""
+        });
+
+        Types.CRCMessageEnvelope memory envelope = Types.CRCMessageEnvelope({
+            message: message,
+            sender: address(source)
+        });
+
+        vm.startPrank(address(destinationInbox));
+
+        vm.expectEmit(true, true, false, false);
+        emit MessageReceived(address(this), value);
+
+        destination.receiveMessage(envelope, sourceChainId);
+
+        vm.stopPrank();
     }
 
     function testRevertOnWrongTarget(uint64 nonce, uint256 value) public {
