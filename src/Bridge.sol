@@ -5,6 +5,7 @@ import {ICRCOutbox} from "./interfaces/ICRCOutbox.sol";
 import {IMessageReceiver} from "./interfaces/IMessageReceiver.sol";
 import {Types} from "./interfaces/Types.sol";
 
+/// @notice Base contract for a bridge. Sends and receives wisp messages
 abstract contract Bridge is IMessageReceiver {
     /// @notice version of Wisp that this protocol uses
     uint8 public immutable WISP_VERSION;
@@ -34,6 +35,10 @@ abstract contract Bridge is IMessageReceiver {
         _;
     }
 
+    /// @param _version version of the wisp protocol
+    /// @param _outbox the address of the wisp protocol outbox that the bridge will send to
+    /// @param _inbox the address of the wisp protocol inbox that the bridge will read from
+    /// @param _counterpartyChainId the chain id of the network whose messages this bridge will only respond to
     constructor(
         uint8 _version,
         address _outbox,
@@ -46,11 +51,18 @@ abstract contract Bridge is IMessageReceiver {
         counterpartyChainId = _counterpartyChainId;
     }
 
+    /// @notice used for setting the address of the bridge countract in the counterparty rollup
+    /// @dev will be used for checking when receiving messages
+    /// @param _counterparty the address of the bridge contract in the counterparty network
     function setCounteparty(address _counterparty) public {
         require(counterparty == address(0), "Counterparty already set");
         counterparty = _counterparty;
     }
 
+    /// @notice used for sending messages
+    /// @dev creates a message sends it to the wisp outbox
+    /// @param nonce a random number used once to guard against replay and differentiate messages
+    /// @param value the amount of currency being sent.
     function sendMessage(uint64 nonce, uint256 value) internal {
         require(value > 0, "No value Sent");
         bytes memory payload = abi.encode(msg.sender, value);
@@ -72,8 +84,9 @@ abstract contract Bridge is IMessageReceiver {
         emit Lock(msg.sender, value, messageHash);
     }
 
-    /// @notice receives CRCMessageEnvelope
+    /// @notice Implements the receiver interface. Sanity checks the message and passes it to implementers to process.
     /// @param envelope the message envelope you are receiving
+    /// @param sourceChainId the chainid of the message source
     function receiveMessage(
         Types.CRCMessageEnvelope calldata envelope,
         uint256 sourceChainId
@@ -90,6 +103,9 @@ abstract contract Bridge is IMessageReceiver {
         return onMessageReceived(receiver, value);
     }
 
+    /// @notice Used by extending contracts to respond to checked messages
+    /// @param receiver the message receiver
+    /// @param value value being locked in the source
     function onMessageReceived(address receiver, uint256 value)
         internal
         virtual
